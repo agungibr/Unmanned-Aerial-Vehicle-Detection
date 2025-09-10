@@ -1,0 +1,28 @@
+# file: .gitignore
+
+# Ignore the Python virtual environment
+env/
+venv/
+*/env/
+*/venv/
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+
+# --- IMPORTANT: Ignore Data, Models, and Results ---
+
+# Ignore the raw data folder as requested
+data/raw/
+
+# Also ignore processed data (it can be recreated by running preprocessing)
+data/processed/
+
+# Ignore large, trained model files
+#models/
+
+# Ignore output results (they are generated, not part of the source code)
+#results/
+
+# Ignore specific OS files
+.DS_Store
