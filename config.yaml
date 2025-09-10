@@ -2,14 +2,14 @@ default:
   data_path: "data/processed/"
   model_save_path: "models/"
   results_save_path: "results/"
-  batch_size: 256
+  batch_size: 512
 
 detection:
   data_filename: "detection_data.h5"
   model_filename: "drone_detection_model.pth"
   model_architecture: "cnn"
   feature_method: "log_mel_mfcc_stack" 
-  epochs: 100
+  epochs: 10
   learning_rate: 0.001
   class_names: ["Non-Drone", "Drone"]
 
