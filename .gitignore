@@ -1,5 +1,3 @@
-# file: .gitignore
-
 # Ignore the Python virtual environment
 env/
 venv/
@@ -10,7 +8,6 @@ venv/
 __pycache__/
 *.pyc
 
-# --- IMPORTANT: Ignore Data, Models, and Results ---
 
 # Ignore the raw data folder as requested
 data/raw/
@@ -19,7 +16,7 @@ data/raw/
 data/processed/
 
 # Ignore large, trained model files
-#models/
+models/
 
 # Ignore output results (they are generated, not part of the source code)
 #results/

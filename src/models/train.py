@@ -7,7 +7,7 @@ from pathlib import Path
 from tqdm import tqdm
 from ..utils.getData import create_dataloaders
 from .CNN import CNN
-from .mlp_model import MLP
+from .MLP import MLP
 
 def plot_training_history(history, save_path):
     fig, axs = plt.subplots(1, 2, figsize=(14, 5))
@@ -29,9 +29,9 @@ def plot_training_history(history, save_path):
     plt.close()
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Train a model based on config.")
-    parser.add_argument('--experiment', type=str, required=True, 
-                        choices=['detection', 'distance_cnn', 'distance_mlp'],
+    parser = argparse.ArgumentParser(description="Train a model based on config.")-
+    parser.add_argument('experiment', type=str, required=True, 
+                        choices=['detection', 'distance_mlp'],
                         help="Name of the experiment to run from config.yaml.")
     args = parser.parse_args()
     
@@ -101,12 +101,10 @@ if __name__ == '__main__':
 
         model.eval()
         val_loss, val_correct = 0, 0
-        val_loop = tqdm(val_loader, desc=f"Epoch {epoch+1}/{EPOCHS} [Val]")
         with torch.no_grad():
-            for inputs, labels in val_loop:
+            for inputs, labels in val_loader:
                 inputs, labels = inputs.to(device), labels.to(device)
                 outputs = model(inputs)
-
                 if args.experiment == 'detection':
                     val_loss += loss_fn(outputs, labels.float().unsqueeze(1)).item()
                     predicted = torch.sigmoid(outputs) > 0.5

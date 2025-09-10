@@ -1,80 +1,124 @@
-## UAV Sound Detection — Usage Guide
+## UAV Sound Detection and Positioning
 
-This project provides scripts to preprocess audio, train CNN models, evaluate them, and run single-file predictions for drone vs non-drone and distance classes.
+This project provides a complete pipeline to train and use a two-stage machine learning system for audio-based drone surveillance.
 
-## Requirements
+1. Detection Model: A CNN that classifies sounds as `Drone` or `Non-Drone`.
+2. Position Model: A secondary model (either CNN or MLP) that estimates the distance of a sound, used only after it has been classified as a drone.
 
-- Python 3.12
-- Linux bash shell
+The entire workflow is managed by a central configuration file (`config.yaml`) and can be run from the command line.
 
-Install dependencies:
+---
+## Project Structure
 
-```bash
-pip install -r requirements.txt
-```
+Unmanned-Aerial-Vehicle-Detection/
+├── data/
+│   ├── raw/         # <-- PLACE YOUR .WAV FILES HERE
+│   └── processed/   # Automatically generated
+├── models/          # Saved .pth models are stored here
+├── results/         # Output plots and metrics are saved here
+├── src/             # All source code
+│   ├── data/
+│   ├── features/
+│   ├── models/
+│   └── utils/
+├── config.yaml      # <-- CONFIGURE YOUR EXPERIMENTS HERE
+└── requirements.txt
 
-## Data layout (matches current code)
 
-The preprocessing script expects WAV files under the `src/data/` folder:
+---
+## Setup
 
-- `src/data/Drone/*.wav`
-- `src/data/Non-Drone/*.wav`
-- `src/data/Jarak/<class>/*.wav` (e.g., `src/data/Jarak/m5/*.wav`, `m10`, ... for distance classes)
+First, set up the project environment. Using a virtual environment is highly recommended.
 
-Tip: If your data currently lives under `data/raw/`, either move/copy it into `src/data/` or create symlinks.
+1. Clone the Repository
+	```bash
+	git clone <your-repo-url>
+	cd Unmanned-Aerial-Vehicle-Detection
+	```
 
-Also, the training/eval scripts read `config.yaml` relative to the `src/` folder. Ensure a copy is available at:
+2. Create and Activate a Virtual Environment
 
-- `src/config.yaml`
+	- On macOS/Linux:
+		```bash
+		python3 -m venv env
+		source env/bin/activate
+		```
+	- On Windows:
+		```bash
+		python -m venv env
+		.\env\Scripts\activate
+		```
 
-Example copy command (run from project root):
+3. Install Dependencies
+	```bash
+	pip install -r requirements.txt
+	```
 
-```bash
-cp config.yaml src/config.yaml
-```
+---
+## Workflow / Usage
 
-## 1) Preprocess features
+All commands should be run from the project root directory.
 
-Converts WAVs into log-mel spectrogram arrays and stores NPZ files used by training/testing.
+### Place the Data
 
-Run from the project root:
+Place your raw audio files in the `data/raw/` directory using the following structure:
+- `data/raw/Drone/*.wav`
+- `data/raw/Non-Drone/*.wav`
+- `data/raw/Jarak/<distance>/*.wav` (e.g., `data/raw/Jarak/1m/`, `data/raw/Jarak/2m/`, etc.)
+
+### Preprocess Data
+
+This script reads the raw audio, extracts features as defined in `config.yaml`, and saves the processed datasets to `data/processed/`.
 
 ```bash
 python -m src.data.preprocessing
 ```
 
-Outputs (under `src/data/processed/`):
-- `detection_data.npz` (X, y)
-- `distance_data.npz` (X, y, class_map) if `src/data/Jarak/` exists
+### Train Models
 
-## 2) Train
+Train any of the models defined in your `config.yaml` using the `--experiment` flag.
 
-Train either the detection model or the distance model. Run from the project root:
+- Train the Detection Model (CNN):
 
 ```bash
-python -m src.models.train --model_type detection
-python -m src.models.train --model_type distance
+python -m src.models.train --experiment detection
 ```
 
-Artifacts (saved relative to `src/`):
-- Models: `src/models/*.pth`
-- Training curves: `src/results/<model>_history_plot.png`
+- Train the Distance Model (CNN):
 
-## 3) Test / Evaluate
+```bash
+python -m src.models.train --experiment distance_cnn
+```
 
-Evaluate on the test split and save a confusion matrix plot. Run from the project root:
+- Train the Distance Model (MLP):
+
+```bash
+python -m src.models.train --experiment distance_mlp
+```
+
+### Step 4: Evaluate Models
+
+Evaluate a trained model on the test set to generate a confusion matrix and accuracy score.
+
+- Evaluate the Detection Model:
 
 ```bash
 python -m src.models.test --model_type detection
+```
+
+- Evaluate the Distance Model (CNN):
+
+```bash
 python -m src.models.test --model_type distance
 ```
 
-Artifacts:
-- Confusion matrix: `src/results/<model>_confusion_matrix.png`
+Note: Evaluation for the MLP distance model is not wired in the current `test.py` (it uses the CNN architecture). You can still train the MLP; for evaluation, either adapt `test.py` or export logits and compute metrics manually.
 
-## 4) Predict a single WAV
+### Step 5: Make a Prediction
 
-The current CLI in `src/models/predict.py` is positional-only and may error if run directly. Use this Python one-liner instead (replace `path/to/audio.wav`):
+Use the prediction utility to get a real-time prediction on a single audio file. The script automatically uses the two-step pipeline.
+
+Current CLI note: the `predict.py` positional-argument parser needs a small tweak before direct CLI use. Until then, use this snippet (replace the path):
 
 ```bash
 python - << 'PY'
@@ -82,17 +126,48 @@ from pathlib import Path
 import yaml
 from src.models.predict import predict_sound
 
-config = yaml.safe_load(open('config.yaml', 'r'))
-predict_sound(Path('path/to/audio.wav'), config)
+with open('config.yaml', 'r') as f:
+	config = yaml.safe_load(f)
+
+predict_sound(Path('data/raw/Jarak/6m/some_drone.wav'), config)
 PY
 ```
 
-Behavior:
-- If detection predicts Drone, it will also estimate the distance class using the distance model.
+Example 1 (A Drone is Detected):
 
+Expected Output (example):
+
+```
+Using cpu for prediction.
+
+✅ --- Prediction Result --- ✅
+Status: Drone Detected
+Estimated Distance: 6m
+```
+
+Example 2 (No Drone is Detected):
+
+```
+Using cpu for prediction.
+
+❌ --- Prediction Result --- ❌
+Status: Non-Drone Detected
+```
+
+---
+## Configuration
+
+All project settings, hyperparameters, and file paths can be modified in the central `config.yaml` file without needing to change the source code. This is where you can adjust epochs, learning rates, batch sizes, and define new experiments (`detection`, `distance_cnn`, `distance_mlp`).
+
+Models and results are saved to the folders defined under the `default` section:
+- `default.data_path`: processed datasets location (default: `data/processed/`)
+- `default.model_save_path`: model checkpoint directory (default: `models/`)
+- `default.results_save_path`: plots and metrics directory (default: `results/`)
+
+---
 ## Notes
 
-- Default hyperparameters and file names live in `config.yaml`. The scripts read the copy at `src/config.yaml`.
-- Feature extraction defaults to 5 seconds padded/truncated per clip (see `src/features/extraction.py`).
-- For GPU training, ensure a CUDA-enabled PyTorch install.
+- Feature extraction methods are configured per experiment (see `feature_method` in `config.yaml`).
+- GPU will be used automatically if available (PyTorch CUDA build required).
+- Ensure your WAVs are readable and of sufficient length; the extractor handles trimming/padding internally.
 
