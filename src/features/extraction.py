@@ -39,12 +39,12 @@ class FeatureExtractor:
             )
             return np.vstack((log_mel_spectrogram, mfccs))
         
-        elif method == 'mfcc_mean':
+        elif method == 'mfcc_sequence':
             mfccs = librosa.feature.mfcc(
                 y=signal, sr=self.sample_rate, n_fft=self.n_fft,
                 hop_length=self.hop_length, n_mfcc=self.n_mfcc
             )
-            return np.mean(mfccs.T, axis=0)
+            return mfccs.T
         
         else:
             raise ValueError(f"Unknown feature extraction method: {method}")

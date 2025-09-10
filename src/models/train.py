@@ -3,11 +3,12 @@ import torch.nn as nn
 import yaml
 import argparse
 import matplotlib.pyplot as plt
-from pathlib import Path
+
 from tqdm import tqdm
+from pathlib import Path
 from ..utils.getData import create_dataloaders
 from .CNN import CNN
-from .MLP import MLP
+from .LSTM import LSTMModel
 
 def plot_training_history(history, save_path):
     fig, axs = plt.subplots(1, 2, figsize=(14, 5))
@@ -29,9 +30,9 @@ def plot_training_history(history, save_path):
     plt.close()
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Train a model based on config.")-
-    parser.add_argument('experiment', type=str, required=True, 
-                        choices=['detection', 'distance_mlp'],
+    parser = argparse.ArgumentParser(description="Train a model based on config.")
+    parser.add_argument('--experiment', type=str, required=True, 
+                        choices=['detection', 'distance'],
                         help="Name of the experiment to run from config.yaml.")
     args = parser.parse_args()
     
@@ -51,21 +52,23 @@ if __name__ == '__main__':
     LEARNING_RATE = params['learning_rate']
     BATCH_SIZE = default_params['batch_size']
     EPOCHS = params['epochs']
-
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Training {args.experiment.upper()} Model on {device}")
 
     train_loader, val_loader, _, input_shape, num_classes, _ = create_dataloaders(
         processed_data_path=PROCESSED_DATA_PATH,
         data_filename=params['data_filename'],
-        batch_size=BATCH_SIZE
+        batch_size=BATCH_SIZE,
+        model_architecture=params['model_architecture']
     )
     
     if params['model_architecture'] == 'cnn':
-        model = CNN(input_shape, num_classes=num_classes).to(device)
-    elif params['model_architecture'] == 'mlp':
-        input_size = input_shape[0] if isinstance(input_shape, tuple) else input_shape
-        model = MLP(input_size=input_size, num_classes=num_classes).to(device)
+        output_neurons = 1 
+        model = CNN(input_shape, num_classes=output_neurons).to(device)
+    elif params['model_architecture'] == 'lstm':
+        input_size = input_shape[1] 
+        hidden_size = params['lstm_hidden_size']
+        num_layers = params['lstm_num_layers']
+        model = LSTMModel(input_size, hidden_size, num_layers, num_classes).to(device)
     else:
         raise ValueError(f"Unknown model architecture: {params['model_architecture']}")
 
@@ -125,7 +128,5 @@ if __name__ == '__main__':
 
     model_save_path = MODELS_PATH / params['model_filename']
     torch.save(model.state_dict(), model_save_path)
-    print(f"Model saved to {model_save_path}")
-
     plot_save_path = RESULTS_PATH / f"{args.experiment}_history_plot.png"
     plot_training_history(history, plot_save_path)

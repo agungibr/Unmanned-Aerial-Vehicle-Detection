@@ -9,14 +9,16 @@ detection:
   model_filename: "drone_detection_model.pth"
   model_architecture: "cnn"
   feature_method: "log_mel_mfcc_stack" 
-  epochs: 10
+  epochs: 100
   learning_rate: 0.001
   class_names: ["Non-Drone", "Drone"]
 
-distance_mlp:
-  data_filename: "distance_mlp_data.npz"
-  model_filename: "drone_distance_mlp_model.pth"
-  model_architecture: "mlp"
-  feature_method: "mfcc_mean"
-  epochs: 10
+distance:
+  data_filename: "distance_data.h5"
+  model_filename: "drone_distance_model.pth"
+  model_architecture: "lstm"
+  feature_method: "mfcc_sequence"
+  epochs: 100
   learning_rate: 0.001
+  lstm_hidden_size: 128
+  lstm_num_layers: 2

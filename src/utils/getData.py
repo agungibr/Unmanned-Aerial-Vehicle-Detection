@@ -1,15 +1,16 @@
-import ast 
-import torch
+import ast
 import h5py
+import torch
 import numpy as np
 from pathlib import Path
 from torch.utils.data import DataLoader, Dataset
 from sklearn.model_selection import train_test_split
 
 class H5Dataset(Dataset):
-    def __init__(self, h5_path, indices):
+    def __init__(self, h5_path, indices, model_architecture):
         self.h5_path = h5_path
         self.indices = indices
+        self.model_architecture = model_architecture
         
         self.h5_file = h5py.File(self.h5_path, 'r')
         self.features = self.h5_file['X']
@@ -24,21 +25,20 @@ class H5Dataset(Dataset):
         feature = self.features[item_idx]
         label = self.labels[item_idx]
         
-        if feature.ndim == 1:
-            feature_tensor = torch.tensor(feature, dtype=torch.float32)
-        else:
+        if self.model_architecture == 'cnn':
             feature_tensor = torch.tensor(feature[np.newaxis, ...], dtype=torch.float32)
+        else:
+            feature_tensor = torch.tensor(feature, dtype=torch.float32)
         
         label_tensor = torch.tensor(label, dtype=torch.long)
         return feature_tensor, label_tensor
 
-def create_dataloaders(processed_data_path: Path, data_filename: str, batch_size: int):
-    print(f"Loading {data_filename} and creating DataLoaders")
+def create_dataloaders(processed_data_path: Path, data_filename: str, batch_size: int, model_architecture: str):
     h5_path = processed_data_path / data_filename
     
     with h5py.File(h5_path, 'r') as hf:
         total_samples = len(hf['y'])
-        labels = hf['y'][:] 
+        labels = hf['y'][:]
         class_map_str = hf.attrs.get('class_map', '{}')
         class_map = ast.literal_eval(class_map_str) if class_map_str else None
 
@@ -51,9 +51,9 @@ def create_dataloaders(processed_data_path: Path, data_filename: str, batch_size
         temp_indices, labels[temp_indices], test_size=0.5, random_state=42, stratify=labels[temp_indices]
     )
 
-    train_dataset = H5Dataset(h5_path, train_indices)
-    val_dataset = H5Dataset(h5_path, val_indices)
-    test_dataset = H5Dataset(h5_path, test_indices)
+    train_dataset = H5Dataset(h5_path, train_indices, model_architecture)
+    val_dataset = H5Dataset(h5_path, val_indices, model_architecture)
+    test_dataset = H5Dataset(h5_path, test_indices, model_architecture)
     
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)

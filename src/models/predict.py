@@ -1,10 +1,12 @@
-import torch
+import ast
 import yaml
+import torch
 import argparse
 import numpy as np
 from pathlib import Path
-from models.CNN import CNN
-from src.features.extraction import FeatureExtractor
+from .CNN import CNN
+from .LSTM import LSTMModel
+from ..features.extraction import FeatureExtractor
 
 def predict_sound(audio_file_path: Path, config: dict):
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -18,46 +20,55 @@ def predict_sound(audio_file_path: Path, config: dict):
     MODELS_PATH = PROJECT_ROOT / default_params['model_save_path']
     PROCESSED_DATA_PATH = PROJECT_ROOT / default_params['data_path']
 
-    distance_data = np.load(PROCESSED_DATA_PATH / distance_params['data_filename'], allow_pickle=True)
-    class_map_distance = distance_data['class_map'].item()
-    idx_to_class = {v: k for k, v in class_map_distance.items()}
-    num_distance_classes = len(idx_to_class)
-
     extractor = FeatureExtractor()
-    feature = extractor.extract(audio_file_path)
-    input_shape = (1, feature.shape[0], feature.shape[1])
-    feature_tensor = torch.tensor(feature[np.newaxis, ...], dtype=torch.float32).to(device)
-
-    detection_model = CNN(input_shape, num_classes=1).to(device)
-    distance_model = CNN(input_shape, num_classes=num_distance_classes).to(device)
-
+    detection_feature = extractor.extract(audio_file_path, method=detection_params['feature_method'])
+    det_input_shape = (1, detection_feature.shape[0], detection_feature.shape[1])
+    detection_model = CNN(det_input_shape, num_classes=1).to(device)
     detection_model.load_state_dict(torch.load(MODELS_PATH / detection_params['model_filename'], map_location=device))
-    distance_model.load_state_dict(torch.load(MODELS_PATH / distance_params['model_filename'], map_location=device))
-
     detection_model.eval()
-    distance_model.eval()
 
+    det_feature_tensor = torch.tensor(detection_feature[np.newaxis, ...], dtype=torch.float32).to(device)
     with torch.no_grad():
-        detection_output = detection_model(feature_tensor)
+        detection_output = detection_model(det_feature_tensor)
         is_drone = torch.sigmoid(detection_output).item() > 0.5
 
-        if is_drone:
-            distance_output = distance_model(feature_tensor)
-            distance_probs = torch.softmax(distance_output, dim=1)
-            predicted_idx = torch.argmax(distance_probs, dim=1).item()
+    if is_drone:
+        print("Drone Detected. Loading Distance Model (LSTM)")
+        distance_feature = extractor.extract(audio_file_path, method=distance_params['feature_method'])
+        dist_input_shape = (distance_feature.shape[0], distance_feature.shape[1])
+        
+        with h5py.File(PROCESSED_DATA_PATH / distance_params['data_filename'], 'r') as hf:
+            class_map_str = hf.attrs.get('class_map', '{}')
+            class_map = ast.literal_eval(class_map_str) if class_map_str else None
+        idx_to_class = {v: k for k, v in class_map.items()}
+        num_distance_classes = len(idx_to_class)
+
+        distance_model = LSTMModel(
+            input_size=dist_input_shape[1], 
+            hidden_size=distance_params['lstm_hidden_size'], 
+            num_layers=distance_params['lstm_num_layers'], 
+            num_classes=num_distance_classes
+        ).to(device)
+        distance_model.load_state_dict(torch.load(MODELS_PATH / distance_params['model_filename'], map_location=device))
+        distance_model.eval()
+        
+        dist_feature_tensor = torch.tensor(distance_feature, dtype=torch.float32).unsqueeze(0).to(device)
+        with torch.no_grad():
+            distance_output = distance_model(dist_feature_tensor)
+            predicted_idx = torch.argmax(distance_output, dim=1).item()
             predicted_distance = idx_to_class[predicted_idx]
 
-            print("\nPrediction Result")
-            print(f"Status: Drone Detected")
-            print(f"Estimated Distance: {predicted_distance}")
-        else:
-            print("\nPrediction Result")
-            print(f"Status: Non-Drone Detected")
+        print("\nPrediction Result")
+        print(f"Status: Drone Detected")
+        print(f"Estimated Distance: {predicted_distance}")
+
+    else:
+        print("\nPrediction Result")
+        print(f"Status: Non-Drone Detected")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Predict if a sound is a drone and estimate its distance.")
-    parser.add_argument('input_file', type=str, required=True,
-                        help="Path to the input .wav audio file.")
+    parser.add_argument('--input_file', type=str, required=True, help="Path to the input .wav audio file.")
     args = parser.parse_args()
 
     input_path = Path(args.input_file)
